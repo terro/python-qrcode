@@ -5,14 +5,14 @@ class BaseImage(object):
     kind = None
     allowed_kinds = None
 
-    def __init__(self, border, width, box_size, *args, **kwargs):
+    def __init__(self, border, width, box_size, background, **kwargs):
         self.border = border
         self.width = width
         self.box_size = box_size
         self.pixel_size = (self.width + self.border*2) * self.box_size
-        self._img = self.new_image(**kwargs)
+        self._img = self.new_image(background, **kwargs)
 
-    def drawrect(self, row, col):
+    def drawrect(self, row, col, color):
         """
         Draw a single rectangle of the QR code.
         """

@@ -22,11 +22,7 @@ alphanumeric, or Kanji symbols)
 Usage
 =====
 
-From the command line, use the installed ``qr`` script::
-
-    qr "Some text" > test.png
-
-Or in Python, use the ``make`` shortcut function::
+In Python, use the ``make`` shortcut function::
 
     import qrcode
     img = qrcode.make('Some data here')
@@ -42,6 +38,12 @@ For more control, use the ``QRCode`` class. For example::
         error_correction=qrcode.constants.ERROR_CORRECT_L,
         box_size=10,
         border=4,
+        foreground="red",
+        background="white",
+        probe_in="blue",
+        probe_out="green",
+        style="water",
+        logo=logo
     )
     qr.add_data('Some data')
     qr.make(fit=True)
@@ -72,70 +74,8 @@ is.
 The ``border`` parameter controls how many boxes thick the border should be
 (the default is 4, which is the minimum according to the specs).
 
-Other image factories
-=====================
+The ``foreground``, ``background``, ``probe_in``, ``probe_out`` parameter controls the color of the QR code.
 
-You can encode as SVG, or use a new pure Python image processor to encode to
-PNG images.
+There are three ``style`` available: ``default`` (normal square block), ``round`` (circle block), ``water`` (liquid block).
 
-The Python examples below use the ``make`` shortcut. The same ``image_factory``
-keyword argument is a valid option for the ``QRCode`` class for more advanced
-usage.
-
-SVG
----
-
-On Python 2.6 must install lxml since the older xml.etree.ElementTree version
-can not be used to create SVG images.
-
-You can create the entire SVG or an SVG fragment. When building an entire SVG
-image, you can use the factory that combines as a path (recommended, and
-default for the script) or a factory that creates a simple set of rectangles.
-
-From your command line::
-
-    qr --factory=svg-path "Some text" > test.svg
-    qr --factory=svg "Some text" > test.svg
-    qr --factory=svg-fragment "Some text" > test.svg
-
-Or in Python::
-
-    import qrcode
-    import qrcode.image.svg
-
-    if method == 'basic':
-        # Simple factory, just a set of rects.
-        factory = qrcode.image.svg.SvgImage
-    elif method == 'fragment':
-        # Fragment factory (also just a set of rects)
-        factory = qrcode.image.svg.SvgFragmentImage
-    else:
-        # Combined path factory, fixes white space that may occur when zooming
-        factory = qrcode.image.svg.SvgPathImage
-
-    img = qrcode.make('Some data here', image_factory=factory)
-
-Two other related factories are available that work the same, but also fill the
-background of the SVG with white::
-
-    qrcode.image.svg.SvgFillImage
-    qrcode.image.svg.SvgPathFillImage
-
-
-Pure Python PNG
----------------
-
-Install the following two packages::
-
-    pip install git+git://github.com/ojii/pymaging.git#egg=pymaging
-    pip install git+git://github.com/ojii/pymaging-png.git#egg=pymaging-png
-
-From your command line::
-
-    qr --factory=pymaging "Some text" > test.png
-
-Or in Python::
-
-    import qrcode
-    from qrcode.image.pure import PymagingImage
-    img = qrcode.make('Some data here', image_factory=PymagingImage)
+You may also set a custom logo by passing a base64 encoded string to ``logo`` parameter. Note that use ``ERROR_CORRECT_H`` when you add a logo.

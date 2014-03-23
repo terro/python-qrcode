@@ -1,4 +1,4 @@
-from qrcode import constants, exceptions, util
+from qrcode import constants, util
 from qrcode.image.base import BaseImage
 
 import six
@@ -13,9 +13,15 @@ def make(data=None, **kwargs):
 class QRCode:
 
     def __init__(self, version=None,
-                 error_correction=constants.ERROR_CORRECT_M,
-                 box_size=10, border=4,
-                 image_factory=None):
+                 error_correction=constants.ERROR_CORRECT_H,
+                 box_size=16, border=2,
+                 image_factory=None,
+                 foreground="black",
+                 background="white",
+                 probe_in="black",
+                 probe_out="black",
+                 style="default",
+                 logo=None):
         self.version = version and int(version)
         self.error_correction = int(error_correction)
         self.box_size = int(box_size)
@@ -23,6 +29,12 @@ class QRCode:
         # any (e.g. for producing printable QR codes).
         self.border = int(border)
         self.image_factory = image_factory
+        self.foreground = foreground
+        self.background = background
+        self.probe_in = probe_in
+        self.probe_out = probe_out
+        self.style = style
+        self.logo = logo
         if image_factory is not None:
             assert issubclass(image_factory, BaseImage)
         self.clear()
@@ -101,12 +113,13 @@ class QRCode:
                 if col + c <= -1 or self.modules_count <= col + c:
                     continue
 
-                if (0 <= r and r <= 6 and (c == 0 or c == 6)
-                        or (0 <= c and c <= 6 and (r == 0 or r == 6))
-                        or (2 <= r and r <= 4 and 2 <= c and c <= 4)):
-                    self.modules[row + r][col + c] = True
+                if (0 <= r <= 6 and (c == 0 or c == 6)
+                        or (0 <= c <= 6 and (r == 0 or r == 6))):
+                    self.modules[row + r][col + c] = (True, constants.POSITION_PROBE_OUT)
+                elif 2 <= r <= 4 and 2 <= c <= 4:
+                    self.modules[row + r][col + c] = (True, constants.POSITION_PROBE_IN)
                 else:
-                    self.modules[row + r][col + c] = False
+                    self.modules[row + r][col + c] = (False, constants.DATA)
 
     def best_fit(self, start=None):
         """
@@ -156,7 +169,7 @@ class QRCode:
         for r in range(modcount):
             out.write("\x1b[1;47m  \x1b[40m")
             for c in range(modcount):
-                if self.modules[r][c]:
+                if self.modules[r][c][0]:
                     out.write("  ")
                 else:
                     out.write("\x1b[1;47m  \x1b[40m")
@@ -183,23 +196,77 @@ class QRCode:
                 image_factory = PilImage
 
         im = image_factory(
-            self.border, self.modules_count, self.box_size, **kwargs)
+            self.border, self.modules_count, self.box_size, self.background, **kwargs)
         for r in range(self.modules_count):
             for c in range(self.modules_count):
-                if self.modules[r][c]:
-                    im.drawrect(r, c)
+                if self.modules[r][c][0]:
+                    if self.modules[r][c][1] == constants.DATA:
+                        self.draw_block(im, r, c, self.foreground)
+                    elif self.modules[r][c][1] == constants.POSITION_PROBE_IN:
+                        self.draw_block(im, r, c, self.probe_in)
+                    elif self.modules[r][c][1] == constants.POSITION_PROBE_OUT:
+                        self.draw_block(im, r, c, self.probe_out)
+                elif self.style == 'water':
+                    self.drawwater_inverse(im, r, c)
+        if self.logo:
+            im.add_logo(self.logo)
         return im
+
+    def draw_block(self, im, r, c, color):
+        if self.style == 'default':
+            im.drawrect(r, c, color)
+        elif self.style == 'round':
+            im.drawround(r, c, color)
+        elif self.style == 'water':
+            self.drawwater(im, r, c, color)
+
+    def drawwater_inverse(self, im, r, c):
+        n = self.modules_count
+        color = self.foreground
+        if 0 <= r < 7 and (0 <= c < 7 or n - 7 <= c < n)\
+           or n - 7 <= r < n and 0 <= c < 7:
+            color = self.probe_out
+        if self.occupy(r-1, c) and self.occupy(r, c-1):
+            im.drawpie(r, c, self.background, color, 2, offset1=2, offset2=2)
+        if self.occupy(r-1, c) and self.occupy(r, c+1):
+            im.drawpie(r, c, self.background, color, 3, offset2=2)
+        if self.occupy(r+1, c) and self.occupy(r, c-1):
+            im.drawpie(r, c, self.background, color, 1, offset1=2)
+        if self.occupy(r+1, c) and self.occupy(r, c+1):
+            im.drawpie(r, c, self.background, color, 0)
+
+    def occupy(self, r, c):
+        n = self.modules_count
+        return 0 <= c < n and 0 <= r < n and self.modules[r][c][0]
+
+    def drawwater(self, im, r, c, color):
+        if self.occupy(r, c-1) or self.occupy(r-1, c) or self.occupy(r-1, c-1):
+            im.drawpartialrect(r, c, color, 2)
+        else:
+            im.drawpie(r, c, color, self.background, 2)
+        if self.occupy(r, c+1) or self.occupy(r-1, c) or self.occupy(r-1, c+1):
+            im.drawpartialrect(r, c, color, 3)
+        else:
+            im.drawpie(r, c, color, self.background, 3)
+        if self.occupy(r, c-1) or self.occupy(r+1, c) or self.occupy(r+1, c-1):
+            im.drawpartialrect(r, c, color, 1)
+        else:
+            im.drawpie(r, c, color, self.background, 1)
+        if self.occupy(r, c+1) or self.occupy(r+1, c) or self.occupy(r+1, c+1):
+            im.drawpartialrect(r, c, color, 0)
+        else:
+            im.drawpie(r, c, color, self.background, 0)
 
     def setup_timing_pattern(self):
         for r in range(8, self.modules_count - 8):
             if self.modules[r][6] is not None:
                 continue
-            self.modules[r][6] = (r % 2 == 0)
+            self.modules[r][6] = ((r % 2 == 0), constants.DATA)
 
         for c in range(8, self.modules_count - 8):
             if self.modules[6][c] is not None:
                 continue
-            self.modules[6][c] = (c % 2 == 0)
+            self.modules[6][c] = ((c % 2 == 0), constants.DATA)
 
     def sutup_position_adjust_pattern(self):
         pos = util.pattern_position(self.version)
@@ -220,20 +287,20 @@ class QRCode:
 
                         if (r == -2 or r == 2 or c == -2 or c == 2 or
                                 (r == 0 and c == 0)):
-                            self.modules[row + r][col + c] = True
+                            self.modules[row + r][col + c] = (True, constants.DATA)
                         else:
-                            self.modules[row + r][col + c] = False
+                            self.modules[row + r][col + c] = (False, constants.DATA)
 
     def setup_type_number(self, test):
         bits = util.BCH_type_number(self.version)
 
         for i in range(18):
             mod = (not test and ((bits >> i) & 1) == 1)
-            self.modules[i // 3][i % 3 + self.modules_count - 8 - 3] = mod
+            self.modules[i // 3][i % 3 + self.modules_count - 8 - 3] = (mod, constants.DATA)
 
         for i in range(18):
             mod = (not test and ((bits >> i) & 1) == 1)
-            self.modules[i % 3 + self.modules_count - 8 - 3][i // 3] = mod
+            self.modules[i % 3 + self.modules_count - 8 - 3][i // 3] = (mod, constants.DATA)
 
     def setup_type_info(self, test, mask_pattern):
         data = (self.error_correction << 3) | mask_pattern
@@ -245,11 +312,11 @@ class QRCode:
             mod = (not test and ((bits >> i) & 1) == 1)
 
             if i < 6:
-                self.modules[i][8] = mod
+                self.modules[i][8] = (mod, constants.DATA)
             elif i < 8:
-                self.modules[i + 1][8] = mod
+                self.modules[i + 1][8] = (mod, constants.DATA)
             else:
-                self.modules[self.modules_count - 15 + i][8] = mod
+                self.modules[self.modules_count - 15 + i][8] = (mod, constants.DATA)
 
         # horizontal
         for i in range(15):
@@ -257,14 +324,14 @@ class QRCode:
             mod = (not test and ((bits >> i) & 1) == 1)
 
             if i < 8:
-                self.modules[8][self.modules_count - i - 1] = mod
+                self.modules[8][self.modules_count - i - 1] = (mod, constants.DATA)
             elif i < 9:
-                self.modules[8][15 - i - 1 + 1] = mod
+                self.modules[8][15 - i - 1 + 1] = (mod, constants.DATA)
             else:
-                self.modules[8][15 - i - 1] = mod
+                self.modules[8][15 - i - 1] = (mod, constants.DATA)
 
         # fixed module
-        self.modules[self.modules_count - 8][8] = (not test)
+        self.modules[self.modules_count - 8][8] = ((not test), constants.DATA)
 
     def map_data(self, data, mask_pattern):
         inc = -1
@@ -297,7 +364,7 @@ class QRCode:
                         if mask_func(row, c):
                             dark = not dark
 
-                        self.modules[row][c] = dark
+                        self.modules[row][c] = (dark, constants.DATA)
                         bitIndex -= 1
 
                         if bitIndex == -1:
@@ -327,7 +394,8 @@ class QRCode:
         code = [[False]*width] * self.border
         x_border = [False]*self.border
         for module in self.modules:
-            code.append(x_border + module + x_border)
+            tmp = map(lambda x: x[0], module)
+            code.append(x_border + tmp + x_border)
         code += [[False]*width] * self.border
 
         return code
